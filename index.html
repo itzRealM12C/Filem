@@ -1,0 +1,219 @@
+<meta name='viewport' content='width=device-width, initial-scale=1'/><!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Local File Manager</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            line-height: 1.6;
+            margin: 0;
+            padding: 20px;
+            color: #333;
+        }
+        h1 {
+            color: #444;
+            border-bottom: 1px solid #eee;
+            padding-bottom: 10px;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 8px 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f5f5f5;
+        }
+        tr:hover {
+            background-color: #f9f9f9;
+        }
+        a {
+            color: #0066cc;
+            text-decoration: none;
+        }
+        a:hover {
+            text-decoration: underline;
+        }
+        .dir::before {
+            content: "📁 ";
+        }
+        .file::before {
+            content: "📄 ";
+        }
+        .breadcrumb {
+            margin-bottom: 20px;
+            padding: 8px 15px;
+            background-color: #f5f5f5;
+            border-radius: 4px;
+        }
+        .breadcrumb a {
+            color: #666;
+        }
+    </style>
+</head>
+<body>
+    <h1>Local File Manager</h1>
+    <div class="breadcrumb" id="breadcrumb"></div>
+    <table>
+        <thead>
+            <tr>
+                <th>Name</th>
+                <th>Type</th>
+                <th>Size</th>
+                <th>Last Modified</th>
+            </tr>
+        </thead>
+        <tbody id="fileList">
+            <tr>
+                <td colspan="4">Loading...</td>
+            </tr>
+        </tbody>
+    </table>
+
+    <script>
+        // Current directory path
+        let currentPath = window.location.pathname;
+        
+        // Function to decode URL-encoded paths
+        function decodePath(path) {
+            return decodeURIComponent(path.replace(/\\/g, '/'));
+        }
+        
+        // Function to get parent directory
+        function getParentDirectory(path) {
+            const parts = path.split('/').filter(part => part !== '');
+            parts.pop();
+            return parts.join('/') || '/';
+        }
+        
+        // Function to update breadcrumb navigation
+        function updateBreadcrumb(path) {
+            const breadcrumb = document.getElementById('breadcrumb');
+            const parts = path.split('/').filter(part => part !== '');
+            
+            let breadcrumbHTML = '<a href="#" onclick="navigateTo(\'/\')">Root</a>';
+            
+            let currentPath = '';
+            for (let i = 0; i < parts.length; i++) {
+                currentPath += '/' + parts[i];
+                breadcrumbHTML += ' / <a href="#" onclick="navigateTo(\'' + currentPath + '\')">' + parts[i] + '</a>';
+            }
+            
+            breadcrumb.innerHTML = breadcrumbHTML;
+        }
+        
+        // Function to navigate to a directory
+        function navigateTo(path) {
+            currentPath = path;
+            window.history.pushState({path: path}, '', 'file://' + path);
+            listFiles(path);
+        }
+        
+        // Function to list files in a directory
+        function listFiles(path) {
+            const fileList = document.getElementById('fileList');
+            fileList.innerHTML = '<tr><td colspan="4">Loading...</td></tr>';
+            
+            updateBreadcrumb(path);
+            
+            // Use XMLHttpRequest to fetch directory listing
+            const xhr = new XMLHttpRequest();
+            xhr.open('GET', 'file://' + path, true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200 || xhr.status === 0) {
+                        // Parse the directory listing (this is a simplified approach)
+                        try {
+                            const parser = new DOMParser();
+                            const htmlDoc = parser.parseFromString(xhr.responseText, 'text/html');
+                            const links = htmlDoc.querySelectorAll('a');
+                            
+                            fileList.innerHTML = '';
+                            
+                            // Add parent directory link if not at root
+                            if (path !== '/') {
+                                const parentRow = document.createElement('tr');
+                                parentRow.innerHTML = `
+                                    <td><a href="#" onclick="navigateTo('${getParentDirectory(path)}')">.. (Parent Directory)</a></td>
+                                    <td>Directory</td>
+                                    <td>-</td>
+                                    <td>-</td>
+                                `;
+                                fileList.appendChild(parentRow);
+                            }
+                            
+                            // Process each file/directory
+                            links.forEach(link => {
+                                const href = link.getAttribute('href');
+                                if (href && !href.startsWith('?') && !href.startsWith('http') && href !== '../') {
+                                    const fullPath = path.endsWith('/') ? path + href : path + '/' + href;
+                                    const isDirectory = href.endsWith('/');
+                                    
+                                    const row = document.createElement('tr');
+                                    const nameCell = document.createElement('td');
+                                    const typeCell = document.createElement('td');
+                                    const sizeCell = document.createElement('td');
+                                    const modifiedCell = document.createElement('td');
+                                    
+                                    if (isDirectory) {
+                                        nameCell.innerHTML = `<a href="#" onclick="navigateTo('${fullPath}')" class="dir">${href.replace(/\/$/, '')}</a>`;
+                                        typeCell.textContent = 'Directory';
+                                        sizeCell.textContent = '-';
+                                    } else {
+                                        nameCell.innerHTML = `<a href="file://${fullPath}" target="_blank" class="file">${href}</a>`;
+                                        typeCell.textContent = 'File';
+                                        // Size and modified date would require additional APIs that aren't available in this context
+                                        sizeCell.textContent = 'N/A';
+                                    }
+                                    modifiedCell.textContent = 'N/A';
+                                    
+                                    row.appendChild(nameCell);
+                                    row.appendChild(typeCell);
+                                    row.appendChild(sizeCell);
+                                    row.appendChild(modifiedCell);
+                                    fileList.appendChild(row);
+                                }
+                            });
+                        } catch (e) {
+                            fileList.innerHTML = '<tr><td colspan="4">Error parsing directory listing</td></tr>';
+                            console.error(e);
+                        }
+                    } else {
+                        fileList.innerHTML = '<tr><td colspan="4">Error accessing directory</td></tr>';
+                    }
+                }
+            };
+            xhr.send();
+        }
+        
+        // Handle back/forward navigation
+        window.onpopstate = function(event) {
+            if (event.state && event.state.path) {
+                currentPath = event.state.path;
+                listFiles(currentPath);
+            }
+        };
+        
+        // Initialize
+        document.addEventListener('DOMContentLoaded', function() {
+            // Start at the current directory or root
+            let initialPath = window.location.pathname;
+            if (!initialPath || initialPath === '/') {
+                initialPath = '/';
+            } else if (!initialPath.endsWith('/')) {
+                // If it's a file, show its parent directory
+                initialPath = getParentDirectory(initialPath);
+            }
+            
+            currentPath = initialPath;
+            listFiles(currentPath);
+        });
+    </script>
+</body>
+</html>
