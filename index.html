@@ -1,334 +1,201 @@
 <!DOCTYPE html>
-<html lang="en">
+<html>
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Local File Manager</title>
+    <title>Index of /</title>
     <style>
-        /* CSS Styles */
         body {
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
+            font-family: monospace;
+            margin: 40px;
             color: #333;
-        }
-        .container {
-            max-width: 1000px;
-            margin: 0 auto;
-            background: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            line-height: 1.6;
         }
         h1 {
-            margin-top: 0;
-            color: #2c3e50;
-            border-bottom: 1px solid #eee;
+            font-size: 1.5em;
+            border-bottom: 1px solid #ddd;
             padding-bottom: 10px;
         }
-        .toolbar {
-            display: flex;
-            gap: 10px;
-            margin-bottom: 20px;
-        }
-        button {
-            background-color: #3498db;
-            color: white;
-            border: none;
-            padding: 8px 16px;
-            border-radius: 4px;
-            cursor: pointer;
-            font-size: 14px;
-            transition: background-color 0.2s;
-        }
-        button:hover {
-            background-color: #2980b9;
-        }
-        button:disabled {
-            background-color: #95a5a6;
-            cursor: not-allowed;
-        }
-        .path-display {
-            background: #f8f9fa;
-            padding: 10px;
-            border-radius: 4px;
-            margin-bottom: 20px;
-            font-family: monospace;
-            word-break: break-all;
-        }
-        .file-list {
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            overflow: hidden;
-        }
-        .file-list table {
+        table {
             width: 100%;
             border-collapse: collapse;
+            margin-top: 20px;
         }
-        .file-list th {
-            background-color: #f1f1f1;
+        th {
             text-align: left;
-            padding: 12px 15px;
+            border-bottom: 2px solid #ddd;
+            padding: 8px 0;
         }
-        .file-list td {
-            padding: 10px 15px;
-            border-top: 1px solid #eee;
+        td {
+            padding: 4px 0;
+            border-bottom: 1px solid #eee;
         }
-        .file-list tr:hover {
-            background-color: #f9f9f9;
+        a {
+            color: #0066cc;
+            text-decoration: none;
         }
-        .file-icon {
-            margin-right: 8px;
+        a:hover {
+            text-decoration: underline;
         }
-        .dir {
+        .dir::before {
+            content: "[DIR] ";
+            color: #008000;
             font-weight: bold;
-            color: #2c3e50;
         }
-        .file {
-            color: #7f8c8d;
+        .file::before {
+            content: "[FILE] ";
+            color: #000080;
         }
-        .file-size {
+        .size {
             text-align: right;
-            font-family: monospace;
+            padding-right: 20px;
         }
-        .file-date {
+        .date {
             white-space: nowrap;
-        }
-        .loading {
-            padding: 20px;
-            text-align: center;
-            color: #7f8c8d;
         }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Local File Manager</h1>
-        
-        <div class="toolbar">
-            <button id="openBtn">Open Folder</button>
-            <button id="upBtn" disabled>Up</button>
-            <button id="refreshBtn" disabled>Refresh</button>
-        </div>
-        
-        <div class="path-display" id="pathDisplay">No folder selected</div>
-        
-        <div class="file-list">
-            <table id="fileTable">
-                <thead>
-                    <tr>
-                        <th>Name</th>
-                        <th class="file-size">Size</th>
-                        <th class="file-date">Modified</th>
-                    </tr>
-                </thead>
-                <tbody id="fileList">
-                    <tr>
-                        <td colspan="3" class="loading">Select a folder to begin</td>
-                    </tr>
-                </tbody>
-            </table>
-        </div>
-    </div>
+    <h1>Index of /</h1>
+    <table>
+        <thead>
+            <tr>
+                <th>Type</th>
+                <th>Name</th>
+                <th class="size">Size</th>
+                <th class="date">Last Modified</th>
+            </tr>
+        </thead>
+        <tbody id="listing">
+            <tr><td colspan="4">Loading directory contents...</td></tr>
+        </tbody>
+    </table>
 
     <script>
-        // Main application
-        document.addEventListener('DOMContentLoaded', () => {
-            // DOM elements
-            const openBtn = document.getElementById('openBtn');
-            const upBtn = document.getElementById('upBtn');
-            const refreshBtn = document.getElementById('refreshBtn');
-            const pathDisplay = document.getElementById('pathDisplay');
-            const fileList = document.getElementById('fileList');
-            
-            // State
-            let currentDirHandle = null;
-            let dirStack = [];
-            
-            // Event listeners
-            openBtn.addEventListener('click', openDirectory);
-            upBtn.addEventListener('click', goUp);
-            refreshBtn.addEventListener('click', refresh);
-            
-            // Functions
-            async function openDirectory() {
-                try {
-                    const dirHandle = await window.showDirectoryPicker();
-                    dirStack = [dirHandle];
-                    await displayDirectory(dirHandle);
-                } catch (error) {
-                    if (error.name !== 'AbortError') {
-                        console.error('Error opening directory:', error);
-                        alert(`Error: ${error.message}`);
-                    }
+        // Get current path from URL
+        const currentPath = window.location.pathname;
+        
+        // Function to fetch directory listing
+        async function fetchDirectory(path) {
+            try {
+                // Use fetch to get the raw directory listing
+                const response = await fetch(path, {
+                    headers: { 'Accept': 'text/html' }
+                });
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
                 }
+                
+                const html = await response.text();
+                parseDirectoryListing(html);
+            } catch (error) {
+                document.getElementById('listing').innerHTML = 
+                    `<tr><td colspan="4">Error: ${error.message}</td></tr>`;
+            }
+        }
+        
+        // Parse the directory listing HTML
+        function parseDirectoryListing(html) {
+            const parser = new DOMParser();
+            const doc = parser.parseFromString(html, 'text/html');
+            const links = doc.querySelectorAll('a');
+            const tbody = document.getElementById('listing');
+            
+            tbody.innerHTML = '';
+            
+            // Add parent directory link if not at root
+            if (currentPath !== '/') {
+                const parentPath = currentPath.split('/').slice(0, -2).join('/') + '/';
+                addRow(tbody, {
+                    type: 'dir',
+                    name: '../',
+                    path: parentPath,
+                    size: '-',
+                    date: '-'
+                });
             }
             
-            async function goUp() {
-                if (dirStack.length <= 1) return;
+            // Process each item
+            links.forEach(link => {
+                const href = link.getAttribute('href');
+                if (!href || href.startsWith('?') || href.startsWith('http')) return;
                 
-                dirStack.pop(); // Remove current
-                const parentHandle = dirStack[dirStack.length - 1];
-                await displayDirectory(parentHandle);
-            }
-            
-            async function refresh() {
-                if (currentDirHandle) {
-                    await displayDirectory(currentDirHandle);
-                }
-            }
-            
-            async function displayDirectory(dirHandle) {
-                currentDirHandle = dirHandle;
-                updateUI();
+                const isDir = href.endsWith('/');
+                const fullPath = currentPath.endsWith('/') 
+                    ? currentPath + href 
+                    : currentPath + '/' + href;
                 
-                try {
-                    fileList.innerHTML = '<tr><td colspan="3" class="loading">Loading...</td></tr>';
-                    
-                    // Display path
-                    let path = dirHandle.name;
-                    if (dirStack.length > 1) {
-                        path = dirStack.map(d => d.name).join(' > ');
-                    }
-                    pathDisplay.textContent = path;
-                    
-                    // Get directory contents
-                    const files = [];
-                    const directories = [];
-                    
-                    for await (const entry of dirHandle.values()) {
-                        if (entry.kind === 'directory') {
-                            directories.push(entry);
-                        } else {
-                            files.push(entry);
-                        }
-                    }
-                    
-                    // Sort alphabetically (dirs first)
-                    directories.sort((a, b) => a.name.localeCompare(b.name));
-                    files.sort((a, b) => a.name.localeCompare(b.name));
-                    
-                    // Display contents
-                    fileList.innerHTML = '';
-                    
-                    // Add parent directory (if not root)
-                    if (dirStack.length > 1) {
-                        addRow({
-                            name: '..',
-                            isDirectory: true,
-                            handle: null,
-                            isParent: true
-                        });
-                    }
-                    
-                    // Add directories
-                    for (const dir of directories) {
-                        addRow({
-                            name: dir.name,
-                            isDirectory: true,
-                            handle: dir
-                        });
-                    }
-                    
-                    // Add files
-                    for (const file of files) {
-                        const fileHandle = await file.getFile();
-                        addRow({
-                            name: file.name,
-                            isDirectory: false,
-                            handle: file,
-                            size: fileHandle.size,
-                            lastModified: fileHandle.lastModified
-                        });
-                    }
-                    
-                    if (directories.length === 0 && files.length === 0) {
-                        fileList.innerHTML = '<tr><td colspan="3" class="loading">Empty folder</td></tr>';
-                    }
-                    
-                } catch (error) {
-                    console.error('Error reading directory:', error);
-                    fileList.innerHTML = `<tr><td colspan="3" class="loading">Error: ${error.message}</td></tr>`;
-                }
-            }
-            
-            function addRow(fileInfo) {
-                const row = document.createElement('tr');
+                // Get file info from the next sibling (typical in Apache listings)
+                let size = '-';
+                let date = '-';
+                let nextSib = link.nextSibling;
                 
-                // Name column
-                const nameCell = document.createElement('td');
-                const icon = document.createElement('span');
-                icon.className = 'file-icon';
-                icon.textContent = fileInfo.isDirectory ? '📁' : '📄';
-                
-                const nameLink = document.createElement('span');
-                nameLink.className = fileInfo.isDirectory ? 'dir' : 'file';
-                nameLink.textContent = fileInfo.name;
-                
-                nameCell.appendChild(icon);
-                nameCell.appendChild(nameLink);
-                
-                // Size column
-                const sizeCell = document.createElement('td');
-                sizeCell.className = 'file-size';
-                sizeCell.textContent = fileInfo.isDirectory ? '-' : formatFileSize(fileInfo.size);
-                
-                // Date column
-                const dateCell = document.createElement('td');
-                dateCell.className = 'file-date';
-                dateCell.textContent = fileInfo.lastModified ? 
-                    new Date(fileInfo.lastModified).toLocaleString() : '-';
-                
-                // Add columns to row
-                row.appendChild(nameCell);
-                row.appendChild(sizeCell);
-                row.appendChild(dateCell);
-                
-                // Add click handler
-                if (fileInfo.isDirectory) {
-                    row.style.cursor = 'pointer';
-                    row.addEventListener('click', async () => {
-                        if (fileInfo.isParent) {
-                            goUp();
-                        } else {
-                            try {
-                                const subDir = await currentDirHandle.getDirectoryHandle(fileInfo.name);
-                                dirStack.push(subDir);
-                                await displayDirectory(subDir);
-                            } catch (error) {
-                                console.error('Error entering directory:', error);
-                                alert(`Error: ${error.message}`);
+                while (nextSib) {
+                    if (nextSib.nodeType === Node.TEXT_NODE) {
+                        const text = nextSib.textContent.trim();
+                        if (text) {
+                            // Try to extract date and size
+                            const parts = text.split(/\s+/).filter(p => p);
+                            if (parts.length >= 2) {
+                                date = parts.slice(0, 3).join(' ');
+                                size = isDir ? '-' : parts[parts.length - 1];
                             }
+                            break;
                         }
-                    });
-                } else {
-                    row.addEventListener('click', async () => {
-                        try {
-                            const file = await fileInfo.handle.getFile();
-                            alert(`Selected file: ${file.name}\nSize: ${formatFileSize(file.size)}`);
-                        } catch (error) {
-                            console.error('Error accessing file:', error);
-                            alert(`Error: ${error.message}`);
-                        }
-                    });
+                    }
+                    nextSib = nextSib.nextSibling;
                 }
                 
-                fileList.appendChild(row);
-            }
+                addRow(tbody, {
+                    type: isDir ? 'dir' : 'file',
+                    name: href,
+                    path: fullPath,
+                    size: size,
+                    date: date
+                });
+            });
+        }
+        
+        // Add a row to the listing
+        function addRow(tbody, item) {
+            const row = document.createElement('tr');
             
-            function updateUI() {
-                upBtn.disabled = dirStack.length <= 1;
-                refreshBtn.disabled = dirStack.length === 0;
-            }
+            // Type column
+            const typeCell = document.createElement('td');
+            typeCell.textContent = item.type === 'dir' ? 'Directory' : 'File';
+            row.appendChild(typeCell);
             
-            function formatFileSize(bytes) {
-                if (bytes === 0) return '0 B';
-                const k = 1024;
-                const sizes = ['B', 'KB', 'MB', 'GB', 'TB'];
-                const i = Math.floor(Math.log(bytes) / Math.log(k));
-                return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
-            }
+            // Name column
+            const nameCell = document.createElement('td');
+            const link = document.createElement('a');
+            link.href = item.path;
+            link.className = item.type;
+            link.textContent = item.name;
+            nameCell.appendChild(link);
+            row.appendChild(nameCell);
+            
+            // Size column
+            const sizeCell = document.createElement('td');
+            sizeCell.className = 'size';
+            sizeCell.textContent = item.size;
+            row.appendChild(sizeCell);
+            
+            // Date column
+            const dateCell = document.createElement('td');
+            dateCell.className = 'date';
+            dateCell.textContent = item.date;
+            row.appendChild(dateCell);
+            
+            tbody.appendChild(row);
+        }
+        
+        // Initial load
+        document.addEventListener('DOMContentLoaded', () => {
+            fetchDirectory(currentPath);
+        });
+        
+        // Handle navigation
+        window.addEventListener('popstate', (event) => {
+            fetchDirectory(window.location.pathname);
         });
     </script>
 </body>
